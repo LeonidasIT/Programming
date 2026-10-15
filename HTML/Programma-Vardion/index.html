@@ -126,6 +126,10 @@ textarea{width:100%;min-height:220px;font-family:var(--font-num);font-size:.8rem
 @media (max-width:760px){
   .emprow{grid-template-columns:1fr 1fr}
   .emprow .nm{grid-column:1/-1}
+  th.emp,td.emp{min-width:0;width:122px}
+  td.emp .meta{font-size:.7rem}
+  .badge{font-size:.56rem;padding:1px 4px}
+  table{min-width:800px}
   h1{font-size:1.35rem}
 }
 @media (prefers-reduced-motion:no-preference){.btn,.req,.iconbtn{transition:background .15s,border-color .15s}}
@@ -397,7 +401,10 @@ async function init(){
   backend=db?dbBackend(db):localBackend();
   const dot=document.getElementById('dot'),note=document.getElementById('storeNote');
   if(db){dot.classList.add('on');note.textContent='Οι αλλαγές αποθηκεύονται αυτόματα και φαίνονται σε όποιον ανοίγει τη σελίδα.'}
-  else note.textContent='Οι αλλαγές αποθηκεύονται μόνο σε αυτή τη συσκευή.';
+  else{
+    note.textContent='Τα δεδομένα αποθηκεύονται σε αυτή τη συσκευή. Κράτα αντίγραφο ασφαλείας από τις Ρυθμίσεις.';
+    try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
+  }
   if(db){try{const u=await window.claude.use('user');if(u&&u.can){const c=await u.can('data.write');if(c===false)readOnly=true}}catch(e){}}
   backend.subscribeConfig(data=>{
     const next={settings:normSettings(data&&data.settings),employees:((data&&data.employees)||[]).map(normEmp)};
@@ -592,6 +599,7 @@ function viewSettings(){
   h+='<div class="card"><h3>Ώρες λήξης απογευματινών</h3><p class="note">Πότε φεύγουν το απόγευμα. Ο τελευταίος είναι πάντα κάποιος που κλείνει ταμείο. Ο καθένας ξεκινά τόσες ώρες πριν (π.χ. 20:30 − 8ωρο = 12:30).</p><div class="slots">';
   for(let i=0;i<SLOTS;i++)h+='<label class="f">'+(i+1)+'ο άτομο<input type="time" id="me-'+i+'" data-slot="e|'+i+'" value="'+esc(s.eveningEnds[i])+'"'+dis+'></label>';
   h+='</div></div>';
+  if(backend&&backend.mode==='local')h+='<div class="card"><h3>Αντίγραφο ασφαλείας</h3><p class="note">Τα δεδομένα είναι αποθηκευμένα μόνο σε αυτό το κινητό. Κάνε αντίγραφο πού και πού (π.χ. στείλ\' το στο email σου). Αν αλλάξεις κινητό ή σβηστούν τα δεδομένα, το επαναφέρεις από εδώ.</p><div class="bar"><button class="btn primary" data-act="exportBackup">Αποθήκευση αντιγράφου</button><label class="btn" for="importFile" style="cursor:pointer">Επαναφορά από αρχείο</label><input type="file" id="importFile" accept="application/json,.json" hidden></div></div>';
   h+='<div class="card"><h3>Άτομα ανά βάρδια, για κάθε μέρα</h3><p class="note">Οι στάνταρ ανάγκες του μαγαζιού. Π.χ. Δευτέρα 3 πρωί και 2 απόγευμα, Σάββατο 4 πρωί και 2 απόγευμα. Ισχύουν για όλες τις εβδομάδες, εκτός αν τις αλλάξεις για μία εβδομάδα στην καρτέλα «Ρεπό εβδομάδας».</p>'+needsGrid(s.needs,'s')+'</div>';
   return h;
 }
@@ -639,6 +647,29 @@ function exampleEmployees(){
   ].map(e=>normEmp({id:uid(),...e}));
 }
 function newEmp(){return {id:uid(),name:'',days:5,hours:8,fullDays:0,can:{M:true,E:true,S:false},keys:false,till:false}}
+/* Backup for the on-device version: everything the app keeps in localStorage, as one JSON file. */
+function exportBackup(){
+  const data={app:'programma-vardion',v:1,savedAt:new Date().toISOString(),items:{}};
+  try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith('sched:')&&k!=='sched:tab')data.items[k]=localStorage.getItem(k)}}catch(e){}
+  const json=JSON.stringify(data);
+  const name='programma-vardion-'+ymd(new Date())+'.json';
+  const file=new File([json],name,{type:'application/json'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){
+    navigator.share({files:[file],title:'Αντίγραφο προγράμματος'}).catch(()=>{});return;
+  }
+  const a=document.createElement('a');a.href=URL.createObjectURL(file);a.download=name;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
+  toast('Το αντίγραφο αποθηκεύτηκε');
+}
+function importBackup(f){
+  if(!f)return;
+  f.text().then(txt=>{
+    const data=JSON.parse(txt);
+    if(!data||data.app!=='programma-vardion'||!data.items)throw new Error('bad');
+    Object.keys(data.items).forEach(k=>{if(k.startsWith('sched:'))localStorage.setItem(k,data.items[k])});
+    toast('Η επαναφορά έγινε');setTimeout(()=>location.reload(),600);
+  }).catch(()=>toast('Αυτό το αρχείο δεν είναι αντίγραφο του προγράμματος'));
+}
 function rememberTab(){try{localStorage.setItem('sched:tab',tab)}catch(e){}}
 let toastTimer;
 function toast(msg){
@@ -672,6 +703,7 @@ main.addEventListener('click',e=>{
   if(act==='regen'){if(week.edited&&armed!=='regen'){armed='regen';render();return}doGenerate();return}
   if(act==='resetNeeds'){delete week.needs;saveWeek();render();return}
   if(act==='clearReq'){if(armed!=='clearReq'){armed='clearReq';render();return}week.requests={};armed=null;saveWeek();render();return}
+  if(act==='exportBackup'){exportBackup();return}
   if(act==='copy'){
     const text=buildText();
     const fallback=()=>{copyText=text;render();const a=document.getElementById('copyArea');if(a){a.focus();a.select()}};
@@ -681,6 +713,7 @@ main.addEventListener('click',e=>{
 });
 main.addEventListener('change',e=>{
   const t=e.target;
+  if(t.id==='importFile'){importBackup(t.files&&t.files[0]);return}
   if(t.dataset.cell){
     const [id,d]=t.dataset.cell.split('|');if(!t.value)return;
     const sched=clone(week.schedule||{});const row=sched[id]?sched[id].slice():Array(7).fill('O');
