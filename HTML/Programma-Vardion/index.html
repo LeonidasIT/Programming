@@ -1,0 +1,579 @@
+<title>Πρόγραμμα Βαρδιών</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: roster board. Header with week switcher, tabs, one wide grid (employees × days) that scrolls inside its own box. */
+:root{
+  --bg:#eef2f4; --surface:#ffffff; --ink:#15212a; --muted:#5a6b77; --line:#d6dee4;
+  --accent:#0d5a6b; --accent-ink:#ffffff; --accent-soft:#dcecef;
+  --m-bg:#fcefcf; --m-fg:#6e4a00; --e-bg:#e0e4fb; --e-fg:#2c3788;
+  --f-bg:#d3efe1; --f-fg:#0f5535; --o-bg:#f1f3f5; --o-fg:#6d7b86; --o-hatch:#e1e6ea;
+  --warn:#b23a1e; --warn-soft:#fbe4dc;
+  --font-ui:"Commissioner",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --font-num:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f151a; --surface:#172129; --ink:#e5ecf1; --muted:#92a2ae; --line:#283541;
+  --accent:#5fc3d6; --accent-ink:#0b1a1f; --accent-soft:#16343c;
+  --m-bg:#3a2e12; --m-fg:#f4cf7c; --e-bg:#232a52; --e-fg:#bcc4ff;
+  --f-bg:#143a2a; --f-fg:#8fe2b9; --o-bg:#1a242c; --o-fg:#7f8f9b; --o-hatch:#202c35;
+  --warn:#ff8c71; --warn-soft:#3d1f17; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151a; --surface:#172129; --ink:#e5ecf1; --muted:#92a2ae; --line:#283541;
+  --accent:#5fc3d6; --accent-ink:#0b1a1f; --accent-soft:#16343c;
+  --m-bg:#3a2e12; --m-fg:#f4cf7c; --e-bg:#232a52; --e-fg:#bcc4ff;
+  --f-bg:#143a2a; --f-fg:#8fe2b9; --o-bg:#1a242c; --o-fg:#7f8f9b; --o-hatch:#202c35;
+  --warn:#ff8c71; --warn-soft:#3d1f17; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:14px}
+h1{margin:0;font-size:1.65rem;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:.9rem;margin-top:2px}
+.weeknav{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:4px}
+.weeknav .lbl{min-width:0;padding:0 8px;font-weight:600;font-variant-numeric:tabular-nums;text-align:center}
+.weeknav .lbl small{display:block;font-weight:500;color:var(--muted);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase}
+button{font:inherit;color:inherit;cursor:pointer}
+.iconbtn{width:36px;height:36px;border-radius:999px;border:0;background:transparent;font-size:1.1rem;display:grid;place-items:center}
+.iconbtn:hover{background:var(--accent-soft)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs button{border:0;background:none;padding:10px 14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs .count{font-family:var(--font-num);font-size:.75rem;background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:1px 7px;margin-left:6px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 14px;font-weight:600}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{color:var(--warn)}
+.btn.armed{background:var(--warn);border-color:var(--warn);color:#fff}
+.btn.small{padding:6px 10px;font-size:.85rem}
+.note{color:var(--muted);font-size:.88rem;max-width:68ch}
+.alert{border:1px solid var(--warn);background:var(--warn-soft);color:var(--ink);border-radius:var(--r);padding:10px 14px;font-size:.9rem;display:flex;flex-direction:column;gap:4px}
+.alert strong{color:var(--warn)}
+.info{border:1px solid var(--line);background:var(--surface);border-radius:var(--r);padding:10px 14px;font-size:.9rem;color:var(--muted)}
+.gridbox{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table{border-collapse:separate;border-spacing:0;width:100%;min-width:860px}
+th,td{padding:6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+thead th{font-size:.78rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;background:var(--surface);position:sticky;top:0}
+thead th .date{display:block;font-family:var(--font-num);text-transform:none;letter-spacing:0;color:var(--ink);font-size:.82rem}
+th.emp,td.emp{position:sticky;left:0;background:var(--surface);z-index:1;min-width:150px;border-right:1px solid var(--line)}
+td.emp .n{font-weight:600}
+td.emp .meta{font-size:.76rem;color:var(--muted);font-family:var(--font-num)}
+td.tot{font-family:var(--font-num);font-size:.82rem;white-space:nowrap;color:var(--muted);text-align:right}
+td.tot b{color:var(--ink);font-weight:500}
+tr:last-child td{border-bottom:0}
+.cell{position:relative;border-radius:8px;padding:7px 8px;min-height:50px;display:flex;flex-direction:column;justify-content:center;gap:1px}
+.cell .t{font-weight:600;font-size:.88rem}
+.cell .h{font-family:var(--font-num);font-size:.72rem;opacity:.85}
+.cell .tag{position:absolute;top:4px;right:6px;font-size:.62rem;text-transform:uppercase;letter-spacing:.05em;font-weight:700;opacity:.8}
+.cell select{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.cell:has(select:focus-visible){outline:2px solid var(--accent);outline-offset:1px}
+.c-M{background:var(--m-bg);color:var(--m-fg)}
+.c-E{background:var(--e-bg);color:var(--e-fg)}
+.c-F{background:var(--f-bg);color:var(--f-fg)}
+.c-O{color:var(--o-fg);background:repeating-linear-gradient(-45deg,var(--o-bg) 0 6px,var(--o-hatch) 6px 12px)}
+.c-X{border:1px dashed var(--line);color:var(--muted)}
+tfoot td{font-family:var(--font-num);font-size:.8rem;color:var(--muted);background:var(--bg)}
+tfoot td.emp{background:var(--bg);font-family:var(--font-ui);font-weight:600;color:var(--ink)}
+.cov{display:flex;gap:6px;flex-wrap:wrap}
+.cov span{padding:1px 6px;border-radius:5px}
+.cov .ok{background:var(--surface)}
+.cov .low{background:var(--warn-soft);color:var(--warn);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:8px;font-size:.82rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:14px;border-radius:4px;display:inline-block}
+.empty{background:var(--surface);border:1px dashed var(--line);border-radius:var(--r);padding:32px 20px;display:flex;flex-direction:column;align-items:flex-start;gap:12px}
+.empty h2{margin:0;font-size:1.15rem}
+.req{width:100%;min-height:44px;border-radius:8px;border:1px dashed var(--line);background:transparent;font-weight:600;font-size:.85rem;color:var(--muted)}
+.req:hover{border-color:var(--accent);color:var(--ink)}
+.req[aria-pressed="true"]{border-style:solid;border-color:transparent;color:var(--o-fg);background:repeating-linear-gradient(-45deg,var(--o-bg) 0 6px,var(--o-hatch) 6px 12px);box-shadow:inset 0 0 0 2px var(--accent)}
+.req[aria-pressed="true"]{color:var(--ink)}
+.over{color:var(--warn);font-weight:600}
+.emps{display:flex;flex-direction:column;gap:10px}
+.emprow{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:grid;grid-template-columns:minmax(150px,1.6fr) repeat(4,minmax(110px,1fr)) auto;gap:10px;align-items:end}
+.emprow .ex{grid-column:1/-1;font-size:.78rem;color:var(--muted);margin-top:-4px}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600;min-width:0}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:8px 9px;width:100%;min-width:0;text-transform:none;letter-spacing:0;font-weight:500}
+input:focus,select:focus{border-color:var(--accent);outline:none}
+.settings{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px}
+.card h3{margin:0;font-size:1rem}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+footer{color:var(--muted);font-size:.8rem;display:flex;gap:8px;align-items:center}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.dot.on{background:var(--f-fg)}
+textarea{width:100%;min-height:220px;font-family:var(--font-num);font-size:.8rem;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;font-size:.9rem;z-index:10}
+@media (max-width:760px){
+  .emprow{grid-template-columns:1fr 1fr}
+  .emprow .nm{grid-column:1/-1}
+  h1{font-size:1.35rem}
+}
+@media (prefers-reduced-motion:no-preference){.btn,.req,.iconbtn{transition:background .15s,border-color .15s}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Πρόγραμμα Βαρδιών</h1>
+      <div class="sub" id="hours">Ωράριο μαγαζιού 06:00–20:30, κάθε μέρα</div>
+    </div>
+    <div class="weeknav" role="group" aria-label="Εβδομάδα">
+      <button class="iconbtn" id="prevWeek" aria-label="Προηγούμενη εβδομάδα">‹</button>
+      <div class="lbl" id="weekLabel">…</div>
+      <button class="iconbtn" id="nextWeek" aria-label="Επόμενη εβδομάδα">›</button>
+    </div>
+  </header>
+  <nav class="tabs" role="tablist" id="tabs">
+    <button role="tab" data-tab="schedule">Πρόγραμμα</button>
+    <button role="tab" data-tab="requests">Ρεπό εβδομάδας<span class="count" id="reqCount">0</span></button>
+    <button role="tab" data-tab="employees">Εργαζόμενοι<span class="count" id="empCount">0</span></button>
+    <button role="tab" data-tab="settings">Ρυθμίσεις</button>
+  </nav>
+  <main id="main"><div class="info">Φόρτωση…</div></main>
+  <footer><span class="dot" id="dot"></span><span id="storeNote">Σύνδεση με την αποθήκευση…</span></footer>
+</div>
+
+<script>
+const DAYS=['Δευτέρα','Τρίτη','Τετάρτη','Πέμπτη','Παρασκευή','Σάββατο','Κυριακή'];
+const DAYS_S=['Δευ','Τρι','Τετ','Πεμ','Παρ','Σαβ','Κυρ'];
+const MONTHS=['Ιανουαρίου','Φεβρουαρίου','Μαρτίου','Απριλίου','Μαΐου','Ιουνίου','Ιουλίου','Αυγούστου','Σεπτεμβρίου','Οκτωβρίου','Νοεμβρίου','Δεκεμβρίου'];
+const LABEL={M:'Πρωί',E:'Απόγευμα',F:'Ολοήμερο',O:'Ρεπό'};
+const PREF={any:'Οποιαδήποτε',morning:'Προτιμά πρωί',evening:'Προτιμά απόγευμα'};
+const DEFAULT_SETTINGS={open:'06:00',close:'20:30',fullStart:'06:00',fullEnd:'20:30',minMorning:2,minEvening:2};
+
+let config={settings:{...DEFAULT_SETTINGS},employees:[]};
+let configLoaded=false;
+let weekId=ymd(mondayOf(addDays(new Date(),7)));
+let week=emptyWeek();
+let weekLoaded=false;
+let tab='schedule';
+let backend=null, unsubWeek=null, readOnly=false;
+let armed=null; // id of a button waiting for a second click
+let copyText=null;
+
+try{const t=localStorage.getItem('sched:tab'); if(t) tab=t;}catch(e){}
+
+/* ---------- helpers ---------- */
+function emptyWeek(){return {requests:{},schedule:null,reqKey:null,edited:false}}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function mondayOf(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+6)%7));return x}
+function ymd(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}
+function parseYmd(s){const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d)}
+function toMin(t){const [h,m]=String(t||'0:0').split(':').map(Number);return (h||0)*60+(m||0)}
+function fmt(m){m=Math.max(0,Math.round(m));return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function clone(o){return JSON.parse(JSON.stringify(o))}
+function uid(){return 'e'+Math.random().toString(36).slice(2,9)}
+function hrs(m){const h=m/60;return (Math.round(h*10)/10).toString().replace('.',',')}
+function dayDate(i){return addDays(parseYmd(weekId),i)}
+function emps(){return config.employees||[]}
+function offTarget(e){return 7-clampInt(e.days,1,7,5)}
+function clampInt(v,lo,hi,def){v=parseInt(v,10);if(isNaN(v))return def;return Math.min(hi,Math.max(lo,v))}
+function reqDays(id){return (week.requests&&week.requests[id])||[]}
+function totalRequests(){return emps().reduce((s,e)=>s+reqDays(e.id).length,0)}
+function reqKeyNow(){return JSON.stringify({r:emps().map(e=>[e.id,reqDays(e.id).slice().sort(),e.days,e.fullDays,e.pref]),s:config.settings})}
+
+function shiftSpan(e,code){
+  const s=config.settings,o=toMin(s.open),c=toMin(s.close),h=Math.round((+e.hours||8)*60);
+  if(code==='M')return [o,Math.min(c,o+h)];
+  if(code==='E')return [Math.max(o,c-h),c];
+  if(code==='F')return [toMin(s.fullStart),toMin(s.fullEnd)];
+  return null;
+}
+function weekLabel(){
+  const a=parseYmd(weekId),b=addDays(a,6);
+  const left=a.getMonth()===b.getMonth()?a.getDate():a.getDate()+' '+MONTHS[a.getMonth()];
+  return left+' – '+b.getDate()+' '+MONTHS[b.getMonth()]+' '+b.getFullYear();
+}
+function relWeek(){
+  const diff=Math.round((parseYmd(weekId)-mondayOf(new Date()))/(7*864e5));
+  return diff===0?'Αυτή η εβδομάδα':diff===1?'Επόμενη εβδομάδα':diff===-1?'Προηγούμενη εβδομάδα':diff>0?'Σε '+diff+' εβδομάδες':'Πριν '+(-diff)+' εβδομάδες';
+}
+
+/* ---------- schedule generator ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+function generate(list,requests,settings,prev,seed){
+  const rnd=mulberry32(seed);
+  const n=list.length; if(!n)return {};
+  const minM=+settings.minMorning||0,minE=+settings.minEvening||0;
+  const reqSets=list.map(e=>new Set((requests[e.id]||[]).map(Number)));
+  const free=list.map((e,i)=>[0,1,2,3,4,5,6].filter(d=>!reqSets[i].has(d)));
+  const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+  const pickWork=e=>e.pref==='morning'?'M':e.pref==='evening'?'E':(rnd()<.5?'M':'E');
+
+  function randomSol(){
+    return list.map((e,i)=>{
+      const row=Array(7).fill('O');
+      const work=Math.min(clampInt(e.days,1,7,5),free[i].length);
+      const days=shuffle(free[i].slice()).slice(0,work);
+      const full=Math.min(clampInt(e.fullDays,0,7,0),work);
+      days.forEach((d,k)=>{row[d]=k<full?'F':pickWork(e)});
+      return row;
+    });
+  }
+  function score(sol){
+    let p=0;const mc=[],ec=[];
+    for(let d=0;d<7;d++){
+      let m=0,ev=0,f=0,w=0;
+      for(let i=0;i<n;i++){const c=sol[i][d];if(c==='M'||c==='F')m++;if(c==='E'||c==='F')ev++;if(c==='F')f++;if(c!=='O')w++}
+      p+=Math.max(0,minM-m)*100+Math.max(0,minE-ev)*100+f*f*.6;
+      mc.push(m);ec.push(ev);
+    }
+    const var_=a=>{const avg=a.reduce((x,y)=>x+y,0)/a.length;return a.reduce((s,x)=>s+(x-avg)*(x-avg),0)};
+    p+=var_(mc)*2+var_(ec)*2;
+    for(let i=0;i<n;i++){
+      const e=list[i],row=sol[i],pr=prev&&prev[e.id];
+      let run=0,maxRun=0;
+      for(let d=0;d<7;d++){
+        const c=row[d];
+        if(e.pref==='morning'&&c==='E')p+=8;
+        if(e.pref==='evening'&&c==='M')p+=8;
+        if(pr&&pr[d]===c)p+=1.5; // keep weeks different from the previous one
+        if(c==='F'&&d>0&&row[d-1]==='F')p+=2;
+        if(c!=='O'){run++;maxRun=Math.max(maxRun,run)}else run=0;
+      }
+      if(maxRun>5)p+=(maxRun-5)*3;
+    }
+    return p;
+  }
+  function mutate(sol){
+    const s=sol.map(r=>r.slice());
+    const i=Math.floor(rnd()*n),fr=free[i];
+    if(rnd()<.6&&fr.length>1){
+      const a=fr[Math.floor(rnd()*fr.length)],b=fr[Math.floor(rnd()*fr.length)];
+      [s[i][a],s[i][b]]=[s[i][b],s[i][a]];
+    }else{
+      const d=Math.floor(rnd()*7);
+      if(s[i][d]==='M')s[i][d]='E';else if(s[i][d]==='E')s[i][d]='M';
+    }
+    return s;
+  }
+  let best=null,bestS=Infinity;
+  for(let r=0;r<30;r++){
+    let cur=randomSol(),cs=score(cur);
+    for(let it=0;it<700;it++){const c=mutate(cur),sc=score(c);if(sc<=cs){cur=c;cs=sc}}
+    if(cs<bestS){best=cur;bestS=cs}
+  }
+  const out={};list.forEach((e,i)=>out[e.id]=best[i]);
+  return out;
+}
+
+/* ---------- storage ---------- */
+function localBackend(){
+  const get=k=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch(e){return null}};
+  const put=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}return Promise.resolve()};
+  return {
+    mode:'local',
+    subscribeConfig(cb){setTimeout(()=>cb(get('sched:config')),0);return()=>{}},
+    subscribeWeek(id,cb){setTimeout(()=>cb(get('sched:week:'+id)),0);return()=>{}},
+    saveConfig:o=>put('sched:config',o),
+    saveWeek:(id,o)=>put('sched:week:'+id,o),
+    getWeek:id=>Promise.resolve(get('sched:week:'+id)),
+  };
+}
+function dbBackend(db){
+  const onErr=e=>{if(e&&e.code==='revoked'){readOnly=true;render()}};
+  return {
+    mode:'db',
+    subscribeConfig(cb){return db.doc('shop/config').onSnapshot(s=>cb(s.exists?clone(s.data()):null),onErr)},
+    subscribeWeek(id,cb){return db.doc('weeks/'+id).onSnapshot(s=>cb(s.exists?clone(s.data()):null),onErr)},
+    saveConfig:o=>db.doc('shop/config').set(o),
+    saveWeek:(id,o)=>db.doc('weeks/'+id).set(o),
+    getWeek:id=>db.doc('weeks/'+id).get().then(s=>s.exists?clone(s.data()):null),
+  };
+}
+let cfgChain=Promise.resolve(),weekChain=Promise.resolve();
+function onWriteErr(e){
+  if(e&&(e.code==='invalid_argument'||e.code==='not_granted')){readOnly=true;render();toast('Δεν έχεις δικαίωμα να κάνεις αλλαγές εδώ')}
+  else toast('Η αποθήκευση απέτυχε. Δοκίμασε ξανά.');
+}
+function saveConfig(){const o=clone(config);cfgChain=cfgChain.then(()=>backend.saveConfig(o)).catch(onWriteErr)}
+function saveWeek(){const o=clone(week),id=weekId;weekChain=weekChain.then(()=>backend.saveWeek(id,o)).catch(onWriteErr)}
+
+function watchWeek(){
+  if(unsubWeek)unsubWeek();
+  weekLoaded=false;week=emptyWeek();render();
+  const id=weekId;
+  unsubWeek=backend.subscribeWeek(id,data=>{
+    if(id!==weekId)return;
+    const next=Object.assign(emptyWeek(),data||{});
+    if(weekLoaded&&JSON.stringify(next)===JSON.stringify(week))return;
+    week=next;weekLoaded=true;render();
+  });
+}
+
+async function init(){
+  render();
+  let db=null;
+  try{if(window.claude&&window.claude.use)db=await window.claude.use('db')}catch(e){db=null}
+  backend=db?dbBackend(db):localBackend();
+  const dot=document.getElementById('dot'),note=document.getElementById('storeNote');
+  if(db){dot.classList.add('on');note.textContent='Οι αλλαγές αποθηκεύονται αυτόματα και φαίνονται σε όποιον ανοίγει τη σελίδα.'}
+  else note.textContent='Οι αλλαγές αποθηκεύονται μόνο σε αυτή τη συσκευή.';
+  if(db){try{const u=await window.claude.use('user');if(u&&u.can){const c=await u.can('data.write');if(c===false)readOnly=true}}catch(e){}}
+  backend.subscribeConfig(data=>{
+    const next=data?{settings:{...DEFAULT_SETTINGS,...(data.settings||{})},employees:data.employees||[]}:{settings:{...DEFAULT_SETTINGS},employees:[]};
+    if(configLoaded&&JSON.stringify(next)===JSON.stringify(config))return;
+    config=next;configLoaded=true;render();
+  });
+  watchWeek();
+}
+
+/* ---------- rendering ---------- */
+function render(){
+  document.getElementById('weekLabel').innerHTML='<small>'+esc(relWeek())+'</small>'+esc(weekLabel());
+  document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
+  document.getElementById('reqCount').textContent=totalRequests();
+  document.getElementById('empCount').textContent=emps().length;
+  const s=config.settings;
+  document.getElementById('hours').textContent='Ωράριο μαγαζιού '+s.open+'–'+s.close+', κάθε μέρα';
+  const main=document.getElementById('main');
+  if(!backend||!configLoaded){main.innerHTML='<div class="info">Φόρτωση…</div>';return}
+  let html='';
+  if(readOnly)html+='<div class="info">Μπορείς να δεις το πρόγραμμα, αλλά όχι να το αλλάξεις.</div>';
+  if(tab==='schedule')html+=viewSchedule();
+  else if(tab==='requests')html+=viewRequests();
+  else if(tab==='employees')html+=viewEmployees();
+  else html+=viewSettings();
+  main.innerHTML='<div style="display:flex;flex-direction:column;gap:14px">'+html+'</div>';
+}
+
+function noEmployees(){
+  return '<div class="empty"><h2>Δεν υπάρχουν εργαζόμενοι ακόμα</h2><p class="note">Πρόσθεσε τους εργαζόμενους με τα στάνταρ τους (μέρες τη βδομάδα, ώρες, ολοήμερα). Μετά σημειώνεις τα ρεπό της εβδομάδας και πατάς «Βγάλε πρόγραμμα».</p><div class="bar"><button class="btn primary" data-act="goEmployees">Πρόσθεσε εργαζόμενο</button><button class="btn" data-act="loadExample">Φόρτωσε παράδειγμα</button></div></div>';
+}
+
+function viewSchedule(){
+  if(!emps().length)return noEmployees();
+  if(!weekLoaded)return '<div class="info">Φόρτωση εβδομάδας…</div>';
+  let h='';
+  const sched=week.schedule;
+  if(!sched){
+    const n=totalRequests();
+    return '<div class="empty"><h2>Δεν έχει βγει πρόγραμμα για αυτή την εβδομάδα</h2><p class="note">'+(n?'Έχουν σημειωθεί '+n+' ρεπό. ':'Δεν έχει σημειωθεί κανένα ρεπό ακόμα. ')+'Όσα ρεπό λείπουν, τα διαλέγει το πρόγραμμα ώστε να καλύπτεται κάθε βάρδια.</p><div class="bar">'+(readOnly?'':'<button class="btn primary" data-act="generate">Βγάλε πρόγραμμα</button>')+'<button class="btn" data-act="goRequests">Σημείωσε ρεπό πρώτα</button></div></div>';
+  }
+  const warns=warnings();
+  const stale=week.reqKey&&week.reqKey!==reqKeyNow();
+  h+='<div class="bar">';
+  if(!readOnly)h+='<button class="btn primary'+(armed==='regen'?' armed':'')+'" data-act="regen">'+(armed==='regen'?'Σίγουρα; Θα χαθούν οι αλλαγές σου':'Βγάλε νέο πρόγραμμα')+'</button>';
+  h+='<button class="btn" data-act="copy">Αντιγραφή για Viber</button></div>';
+  if(stale)h+='<div class="alert"><strong>Τα ρεπό ή οι εργαζόμενοι άλλαξαν μετά το πρόγραμμα.</strong><span>Πάτα «Βγάλε νέο πρόγραμμα» για να τα λάβει υπόψη.</span></div>';
+  if(warns.length)h+='<div class="alert"><strong>Προσοχή</strong>'+warns.map(w=>'<span>'+w+'</span>').join('')+'</div>';
+  h+='<div class="gridbox"><table><thead><tr><th class="emp">Εργαζόμενος</th>';
+  for(let d=0;d<7;d++)h+='<th>'+DAYS[d]+'<span class="date">'+dayDate(d).getDate()+'/'+(dayDate(d).getMonth()+1)+'</span></th>';
+  h+='<th style="text-align:right">Σύνολο</th></tr></thead><tbody>';
+  emps().forEach(e=>{
+    const row=sched[e.id];const req=new Set(reqDays(e.id));
+    let mins=0,work=0,full=0;
+    h+='<tr><td class="emp"><div class="n">'+esc(e.name||'Χωρίς όνομα')+'</div><div class="meta">'+metaLine(e)+'</div></td>';
+    for(let d=0;d<7;d++){
+      const c=row?row[d]:null;
+      const span=c?shiftSpan(e,c):null;
+      if(span){mins+=span[1]-span[0];work++}
+      if(c==='F')full++;
+      const cls=c?'c-'+c:'c-X';
+      h+='<td><div class="cell '+cls+'">';
+      if(req.has(d))h+='<span class="tag">ζήτησε</span>';
+      h+='<span class="t">'+(c?LABEL[c]:'—')+'</span>';
+      if(span)h+='<span class="h">'+fmt(span[0])+'–'+fmt(span[1])+'</span>';
+      if(!readOnly){
+        h+='<select aria-label="'+esc(e.name)+', '+DAYS[d]+'" data-cell="'+esc(e.id)+'|'+d+'">';
+        ['M','E','F','O'].forEach(k=>{h+='<option value="'+k+'"'+(k===c?' selected':'')+'>'+LABEL[k]+'</option>'});
+        if(!c)h+='<option value="" selected>—</option>';
+        h+='</select>';
+      }
+      h+='</div></td>';
+    }
+    h+='<td class="tot"><b>'+hrs(mins)+'ω</b><br>'+work+' μέρες · '+full+' ολοήμ.</td></tr>';
+  });
+  h+='</tbody><tfoot><tr><td class="emp">Κάλυψη</td>';
+  const cov=coverage();const s=config.settings;
+  for(let d=0;d<7;d++){
+    const m=cov.m[d],ev=cov.e[d];
+    h+='<td><div class="cov"><span class="'+(m<s.minMorning?'low':'ok')+'" title="Πρωί">Π '+m+'</span><span class="'+(ev<s.minEvening?'low':'ok')+'" title="Απόγευμα">Α '+ev+'</span></div></td>';
+  }
+  h+='<td></td></tr></tfoot></table></div>';
+  h+='<div class="legend"><span><i class="c-M"></i>Πρωί</span><span><i class="c-E"></i>Απόγευμα</span><span><i class="c-F"></i>Ολοήμερο</span><span><i class="c-O"></i>Ρεπό</span><span>«ζήτησε» = ρεπό που ζήτησε ο εργαζόμενος</span></div>';
+  h+='<p class="note">Πάτα σε οποιοδήποτε κελί για να αλλάξεις τη βάρδια με το χέρι. Στην κάλυψη, Π = άτομα το πρωί, Α = άτομα το απόγευμα (το ολοήμερο μετράει και στα δύο).</p>';
+  if(copyText!==null)h+='<div class="card"><h3>Κείμενο προγράμματος</h3><p class="note">Η αυτόματη αντιγραφή δεν επιτρέπεται εδώ. Επίλεξε το κείμενο και αντέγραψέ το.</p><textarea id="copyArea" readonly>'+esc(copyText)+'</textarea></div>';
+  return h;
+}
+function metaLine(e){
+  return clampInt(e.days,1,7,5)+'/7 · '+String(+e.hours||8).replace('.',',')+'ωρο · '+clampInt(e.fullDays,0,7,0)+' ολοήμ.';
+}
+function coverage(){
+  const m=Array(7).fill(0),ev=Array(7).fill(0);
+  if(!week.schedule)return {m,e:ev};
+  emps().forEach(e=>{const r=week.schedule[e.id];if(!r)return;for(let d=0;d<7;d++){if(r[d]==='M'||r[d]==='F')m[d]++;if(r[d]==='E'||r[d]==='F')ev[d]++}});
+  return {m,e:ev};
+}
+function warnings(){
+  const w=[];const s=config.settings;const cov=coverage();
+  emps().forEach(e=>{
+    const r=reqDays(e.id).length,t=offTarget(e);
+    if(r>t)w.push(esc(e.name)+': ζήτησε '+r+' ρεπό, ενώ τα στάνταρ του είναι '+t+'. Θα δουλέψει '+(7-r)+' μέρες.');
+    if(week.schedule&&!week.schedule[e.id])w.push(esc(e.name)+' δεν υπάρχει στο πρόγραμμα. Βγάλε νέο πρόγραμμα για να μπει.');
+  });
+  const low=[];for(let d=0;d<7;d++)if(cov.m[d]<s.minMorning||cov.e[d]<s.minEvening)low.push(DAYS[d]);
+  if(week.schedule&&low.length)w.push('Λίγα άτομα σε κάποια βάρδια: '+low.join(', ')+'. Δες τη γραμμή «Κάλυψη» στο τέλος.');
+  return w;
+}
+
+function viewRequests(){
+  if(!emps().length)return noEmployees();
+  if(!weekLoaded)return '<div class="info">Φόρτωση εβδομάδας…</div>';
+  let h='<p class="note">Σημείωσε τις μέρες που ζήτησε ρεπό ο καθένας για την εβδομάδα <b>'+esc(weekLabel())+'</b>. Αν κάποιος δεν ζητήσει, το πρόγραμμα του δίνει ρεπό μόνο του.</p>';
+  h+='<div class="gridbox"><table style="min-width:720px"><thead><tr><th class="emp">Εργαζόμενος</th>';
+  for(let d=0;d<7;d++)h+='<th>'+DAYS_S[d]+'<span class="date">'+dayDate(d).getDate()+'/'+(dayDate(d).getMonth()+1)+'</span></th>';
+  h+='<th style="text-align:right">Ρεπό</th></tr></thead><tbody>';
+  emps().forEach(e=>{
+    const req=new Set(reqDays(e.id)),t=offTarget(e);
+    h+='<tr><td class="emp"><div class="n">'+esc(e.name)+'</div><div class="meta">'+metaLine(e)+'</div></td>';
+    for(let d=0;d<7;d++)h+='<td><button class="req" '+(readOnly?'disabled ':'')+'aria-pressed="'+req.has(d)+'" data-req="'+esc(e.id)+'|'+d+'" aria-label="'+esc(e.name)+' ρεπό '+DAYS[d]+'">'+(req.has(d)?'Ρεπό':'+')+'</button></td>';
+    h+='<td class="tot"><span class="'+(req.size>t?'over':'')+'"><b>'+req.size+'</b> / '+t+'</span></td></tr>';
+  });
+  h+='</tbody></table></div>';
+  if(!readOnly)h+='<div class="bar"><button class="btn primary" data-act="generateFromReq">'+(week.schedule?'Βγάλε νέο πρόγραμμα':'Βγάλε πρόγραμμα')+'</button><button class="btn'+(armed==='clearReq'?' armed':'')+'" data-act="clearReq">'+(armed==='clearReq'?'Σίγουρα; Σβήνονται όλα':'Καθαρισμός ρεπό')+'</button></div>';
+  h+='<p class="note">Η στήλη «Ρεπό» δείχνει πόσα ζήτησε / πόσα δικαιούται με βάση τα στάνταρ (π.χ. 6/7 = 1 ρεπό).</p>';
+  return h;
+}
+
+function viewEmployees(){
+  let h='<p class="note">Τα στάνταρ του κάθε εργαζόμενου. Π.χ. 6 μέρες, 8ωρο, 3 ολοήμερα = δουλεύει 6/7, οι 3 μέρες είναι ολοήμερες και οι υπόλοιπες πρωί ή απόγευμα.</p><div class="emps">';
+  if(!emps().length)h+=noEmployees();
+  emps().forEach(e=>{
+    const id=esc(e.id);
+    h+='<div class="emprow">';
+    h+='<label class="f nm">Όνομα<input id="n-'+id+'" data-emp="'+id+'" data-field="name" value="'+esc(e.name)+'" '+(readOnly?'disabled':'')+'></label>';
+    h+='<label class="f">Μέρες / εβδομάδα<select id="d-'+id+'" data-emp="'+id+'" data-field="days" '+(readOnly?'disabled':'')+'>';
+    for(let i=1;i<=7;i++)h+='<option value="'+i+'"'+(clampInt(e.days,1,7,5)===i?' selected':'')+'>'+i+'/7</option>';
+    h+='</select></label>';
+    h+='<label class="f">Ώρες βάρδιας<input id="h-'+id+'" type="number" min="2" max="12" step="0.5" inputmode="decimal" data-emp="'+id+'" data-field="hours" value="'+esc(e.hours??8)+'" '+(readOnly?'disabled':'')+'></label>';
+    h+='<label class="f">Ολοήμερα / εβδ.<select id="f-'+id+'" data-emp="'+id+'" data-field="fullDays" '+(readOnly?'disabled':'')+'>';
+    for(let i=0;i<=clampInt(e.days,1,7,5);i++)h+='<option value="'+i+'"'+(clampInt(e.fullDays,0,7,0)===i?' selected':'')+'>'+i+'</option>';
+    h+='</select></label>';
+    h+='<label class="f">Βάρδια<select id="p-'+id+'" data-emp="'+id+'" data-field="pref" '+(readOnly?'disabled':'')+'>';
+    Object.keys(PREF).forEach(k=>{h+='<option value="'+k+'"'+((e.pref||'any')===k?' selected':'')+'>'+PREF[k]+'</option>'});
+    h+='</select></label>';
+    if(!readOnly)h+='<button class="btn small danger'+(armed==='del-'+e.id?' armed':'')+'" data-del="'+id+'">'+(armed==='del-'+e.id?'Σίγουρα;':'Διαγραφή')+'</button>';
+    else h+='<span></span>';
+    const m=shiftSpan(e,'M'),ev=shiftSpan(e,'E');
+    h+='<div class="ex">Πρωί '+fmt(m[0])+'–'+fmt(m[1])+' · Απόγευμα '+fmt(ev[0])+'–'+fmt(ev[1])+(e.example?' · <i>παράδειγμα, άλλαξέ το ή σβήσ\' το</i>':'')+'</div>';
+    h+='</div>';
+  });
+  h+='</div>';
+  if(!readOnly&&emps().length)h+='<div class="bar"><button class="btn primary" data-act="addEmp">+ Νέος εργαζόμενος</button></div>';
+  return h;
+}
+
+function viewSettings(){
+  const s=config.settings,dis=readOnly?' disabled':'';
+  return '<div class="settings">'+
+  '<div class="card"><h3>Ωράριο μαγαζιού</h3><div class="row2"><label class="f">Ανοίγει<input type="time" id="s-open" data-set="open" value="'+esc(s.open)+'"'+dis+'></label><label class="f">Κλείνει<input type="time" id="s-close" data-set="close" value="'+esc(s.close)+'"'+dis+'></label></div><p class="note">Η πρωινή βάρδια ξεκινά με το άνοιγμα και η απογευματινή τελειώνει με το κλείσιμο. Η διάρκεια βγαίνει από τις ώρες του κάθε εργαζόμενου.</p></div>'+
+  '<div class="card"><h3>Ολοήμερο</h3><div class="row2"><label class="f">Από<input type="time" id="s-fs" data-set="fullStart" value="'+esc(s.fullStart)+'"'+dis+'></label><label class="f">Έως<input type="time" id="s-fe" data-set="fullEnd" value="'+esc(s.fullEnd)+'"'+dis+'></label></div><p class="note">Το ολοήμερο μετράει και ως πρωί και ως απόγευμα στην κάλυψη.</p></div>'+
+  '<div class="card"><h3>Ελάχιστα άτομα ανά βάρδια</h3><div class="row2"><label class="f">Πρωί<input type="number" min="0" max="20" id="s-mm" data-set="minMorning" value="'+esc(s.minMorning)+'"'+dis+'></label><label class="f">Απόγευμα<input type="number" min="0" max="20" id="s-me" data-set="minEvening" value="'+esc(s.minEvening)+'"'+dis+'></label></div><p class="note">Το πρόγραμμα προσπαθεί να έχει τουλάχιστον τόσα άτομα κάθε μέρα.</p></div>'+
+  '</div>';
+}
+
+/* ---------- actions ---------- */
+async function doGenerate(){
+  let prev=null;
+  try{const p=await backend.getWeek(ymd(addDays(parseYmd(weekId),-7)));prev=p&&p.schedule}catch(e){}
+  week.schedule=generate(emps(),week.requests||{},config.settings,prev,(Math.random()*2**31)|0);
+  week.reqKey=reqKeyNow();week.edited=false;week.generatedAt=new Date().toISOString();
+  armed=null;tab='schedule';rememberTab();saveWeek();render();toast('Το πρόγραμμα βγήκε');
+}
+function buildText(){
+  let t='Πρόγραμμα '+weekLabel()+'\n';
+  for(let d=0;d<7;d++){
+    const dd=dayDate(d);t+='\n'+DAYS[d].toUpperCase()+' '+dd.getDate()+'/'+(dd.getMonth()+1)+'\n';
+    ['M','E','F'].forEach(c=>{
+      const who=emps().filter(e=>week.schedule[e.id]&&week.schedule[e.id][d]===c).map(e=>{const s=shiftSpan(e,c);return e.name+' ('+fmt(s[0])+'-'+fmt(s[1])+')'});
+      if(who.length)t+=LABEL[c]+': '+who.join(', ')+'\n';
+    });
+    const off=emps().filter(e=>week.schedule[e.id]&&week.schedule[e.id][d]==='O').map(e=>e.name);
+    if(off.length)t+='Ρεπό: '+off.join(', ')+'\n';
+  }
+  return t;
+}
+function exampleEmployees(){
+  return [
+    {name:'Χρήστος',days:6,hours:8,fullDays:3,pref:'any'},
+    {name:'Μαρία',days:5,hours:8,fullDays:0,pref:'morning',example:true},
+    {name:'Γιώργος',days:6,hours:8,fullDays:2,pref:'any',example:true},
+    {name:'Ελένη',days:5,hours:8,fullDays:1,pref:'evening',example:true},
+    {name:'Νίκος',days:5,hours:6,fullDays:0,pref:'any',example:true},
+    {name:'Κατερίνα',days:5,hours:8,fullDays:1,pref:'any',example:true},
+  ].map(e=>({id:uid(),...e}));
+}
+function rememberTab(){try{localStorage.setItem('sched:tab',tab)}catch(e){}}
+let toastTimer;
+function toast(msg){
+  let el=document.querySelector('.toast');if(!el){el=document.createElement('div');el.className='toast';el.setAttribute('role','status');document.body.appendChild(el)}
+  el.textContent=msg;el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.hidden=true,2200);
+}
+
+document.getElementById('tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(!b)return;tab=b.dataset.tab;armed=null;copyText=null;rememberTab();render()});
+document.getElementById('prevWeek').addEventListener('click',()=>{weekId=ymd(addDays(parseYmd(weekId),-7));armed=null;copyText=null;if(backend)watchWeek();else render()});
+document.getElementById('nextWeek').addEventListener('click',()=>{weekId=ymd(addDays(parseYmd(weekId),7));armed=null;copyText=null;if(backend)watchWeek();else render()});
+
+const main=document.getElementById('main');
+main.addEventListener('click',e=>{
+  const t=e.target.closest('button');if(!t)return;
+  const act=t.dataset.act;
+  if(t.dataset.req){
+    const [id,d]=t.dataset.req.split('|');const day=+d;
+    const cur=new Set(reqDays(id));cur.has(day)?cur.delete(day):cur.add(day);
+    week.requests={...(week.requests||{}),[id]:[...cur].sort()};saveWeek();render();return;
+  }
+  if(t.dataset.del){
+    const id=t.dataset.del;
+    if(armed!=='del-'+id){armed='del-'+id;render();return}
+    config.employees=emps().filter(x=>x.id!==id);armed=null;saveConfig();render();return;
+  }
+  if(act==='goEmployees'){tab='employees';if(!emps().length){config.employees=[{id:uid(),name:'',days:5,hours:8,fullDays:0,pref:'any'}];saveConfig()}rememberTab();render();const i=main.querySelector('input[data-field="name"]');if(i)i.focus();return}
+  if(act==='goRequests'){tab='requests';rememberTab();render();return}
+  if(act==='loadExample'){config.employees=exampleEmployees();saveConfig();render();return}
+  if(act==='addEmp'){const n={id:uid(),name:'',days:5,hours:8,fullDays:0,pref:'any'};config.employees=[...emps(),n];saveConfig();render();const i=document.getElementById('n-'+n.id);if(i)i.focus();return}
+  if(act==='generate'||act==='generateFromReq'){doGenerate();return}
+  if(act==='regen'){if(week.edited&&armed!=='regen'){armed='regen';render();return}doGenerate();return}
+  if(act==='clearReq'){if(armed!=='clearReq'){armed='clearReq';render();return}week.requests={};armed=null;saveWeek();render();return}
+  if(act==='copy'){
+    const text=buildText();
+    const fallback=()=>{copyText=text;render();const a=document.getElementById('copyArea');if(a){a.focus();a.select()}};
+    try{navigator.clipboard.writeText(text).then(()=>{copyText=null;toast('Αντιγράφηκε. Κάνε επικόλληση στο Viber ή στο WhatsApp.')},fallback)}catch(err){fallback()}
+    return;
+  }
+});
+main.addEventListener('change',e=>{
+  const t=e.target;
+  if(t.dataset.cell){
+    const [id,d]=t.dataset.cell.split('|');if(!t.value)return;
+    const sched=clone(week.schedule||{});const row=sched[id]?sched[id].slice():Array(7).fill('O');
+    row[+d]=t.value;sched[id]=row;week.schedule=sched;week.edited=true;saveWeek();render();return;
+  }
+  if(t.dataset.emp){
+    const emp=emps().find(x=>x.id===t.dataset.emp);if(!emp)return;
+    const f=t.dataset.field;
+    if(f==='name')emp.name=t.value.trim();
+    else if(f==='days'){emp.days=clampInt(t.value,1,7,5);emp.fullDays=Math.min(clampInt(emp.fullDays,0,7,0),emp.days)}
+    else if(f==='hours'){const v=parseFloat(String(t.value).replace(',','.'));emp.hours=isNaN(v)?8:Math.min(12,Math.max(2,v))}
+    else if(f==='fullDays')emp.fullDays=clampInt(t.value,0,7,0);
+    else if(f==='pref')emp.pref=t.value;
+    delete emp.example;
+    saveConfig();render();return;
+  }
+  if(t.dataset.set){
+    const k=t.dataset.set;
+    config.settings={...config.settings,[k]:(k==='minMorning'||k==='minEvening')?clampInt(t.value,0,20,2):t.value};
+    saveConfig();render();
+  }
+});
+
+init();
+</script>
