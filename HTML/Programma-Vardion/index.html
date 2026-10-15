@@ -103,6 +103,12 @@ input:focus,select:focus{border-color:var(--accent);outline:none}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px}
 .card h3{margin:0;font-size:1rem}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+table.needs{min-width:560px}
+table.needs input{text-align:center;font-family:var(--font-num);padding:7px 4px}
+table.needs th.emp,table.needs td.emp{min-width:110px}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-weight:600;font-size:.82rem}
+h3.sect{margin:10px 0 0;font-size:1.02rem}
+.card .gridbox{border-radius:8px}
 footer{color:var(--muted);font-size:.8rem;display:flex;gap:8px;align-items:center}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
 .dot.on{background:var(--f-fg)}
@@ -144,7 +150,14 @@ const DAYS_S=['Δευ','Τρι','Τετ','Πεμ','Παρ','Σαβ','Κυρ'];
 const MONTHS=['Ιανουαρίου','Φεβρουαρίου','Μαρτίου','Απριλίου','Μαΐου','Ιουνίου','Ιουλίου','Αυγούστου','Σεπτεμβρίου','Οκτωβρίου','Νοεμβρίου','Δεκεμβρίου'];
 const LABEL={M:'Πρωί',E:'Απόγευμα',F:'Ολοήμερο',O:'Ρεπό'};
 const PREF={any:'Οποιαδήποτε',morning:'Προτιμά πρωί',evening:'Προτιμά απόγευμα'};
-const DEFAULT_SETTINGS={open:'06:00',close:'20:30',fullStart:'06:00',fullEnd:'20:30',minMorning:2,minEvening:2};
+const DEFAULT_SETTINGS={open:'06:00',close:'20:30',fullStart:'06:00',fullEnd:'20:30',minMorning:2,minEvening:2,needs:defaultNeeds(2,2)};
+function defaultNeeds(m,e){return Array.from({length:7},()=>({m,e}))}
+function normSettings(s){
+  s={...DEFAULT_SETTINGS,...(s||{})};
+  const old=Array.isArray(s.needs)&&s.needs.length===7?s.needs:defaultNeeds(+s.minMorning||2,+s.minEvening||2);
+  s.needs=old.map(n=>({m:clampInt(n&&n.m,0,20,2),e:clampInt(n&&n.e,0,20,2)}));
+  return s;
+}
 
 let config={settings:{...DEFAULT_SETTINGS},employees:[]};
 let configLoaded=false;
@@ -176,7 +189,10 @@ function offTarget(e){return 7-clampInt(e.days,1,7,5)}
 function clampInt(v,lo,hi,def){v=parseInt(v,10);if(isNaN(v))return def;return Math.min(hi,Math.max(lo,v))}
 function reqDays(id){return (week.requests&&week.requests[id])||[]}
 function totalRequests(){return emps().reduce((s,e)=>s+reqDays(e.id).length,0)}
-function reqKeyNow(){return JSON.stringify({r:emps().map(e=>[e.id,reqDays(e.id).slice().sort(),e.days,e.fullDays,e.pref]),s:config.settings})}
+function reqKeyNow(){return JSON.stringify({r:emps().map(e=>[e.id,reqDays(e.id).slice().sort(),e.days,e.fullDays,e.pref,e.hours]),s:config.settings,n:weekNeeds()})}
+/* People needed per day: this week's override if set, otherwise the weekday default from settings. */
+function weekNeeds(){return [0,1,2,3,4,5,6].map(d=>(week.needs&&week.needs[d])||config.settings.needs[d])}
+function hasWeekOverride(){return Array.isArray(week.needs)&&week.needs.length===7}
 
 function shiftSpan(e,code){
   const s=config.settings,o=toMin(s.open),c=toMin(s.close),h=Math.round((+e.hours||8)*60);
@@ -198,10 +214,9 @@ function relWeek(){
 /* ---------- schedule generator ---------- */
 function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
-function generate(list,requests,settings,prev,seed){
+function generate(list,requests,needs,prev,seed){
   const rnd=mulberry32(seed);
   const n=list.length; if(!n)return {};
-  const minM=+settings.minMorning||0,minE=+settings.minEvening||0;
   const reqSets=list.map(e=>new Set((requests[e.id]||[]).map(Number)));
   const free=list.map((e,i)=>[0,1,2,3,4,5,6].filter(d=>!reqSets[i].has(d)));
   const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
@@ -222,8 +237,10 @@ function generate(list,requests,settings,prev,seed){
     for(let d=0;d<7;d++){
       let m=0,ev=0,f=0,w=0;
       for(let i=0;i<n;i++){const c=sol[i][d];if(c==='M'||c==='F')m++;if(c==='E'||c==='F')ev++;if(c==='F')f++;if(c!=='O')w++}
-      p+=Math.max(0,minM-m)*100+Math.max(0,minE-ev)*100+f*f*.6;
-      mc.push(m);ec.push(ev);
+      const nm=needs[d].m,ne=needs[d].e;
+      p+=Math.max(0,nm-m)*100+Math.max(0,ne-ev)*100+f*f*.6;
+      // spare people go where the day asks for more
+      mc.push(m-nm);ec.push(ev-ne);
     }
     const var_=a=>{const avg=a.reduce((x,y)=>x+y,0)/a.length;return a.reduce((s,x)=>s+(x-avg)*(x-avg),0)};
     p+=var_(mc)*2+var_(ec)*2;
@@ -318,7 +335,7 @@ async function init(){
   else note.textContent='Οι αλλαγές αποθηκεύονται μόνο σε αυτή τη συσκευή.';
   if(db){try{const u=await window.claude.use('user');if(u&&u.can){const c=await u.can('data.write');if(c===false)readOnly=true}}catch(e){}}
   backend.subscribeConfig(data=>{
-    const next=data?{settings:{...DEFAULT_SETTINGS,...(data.settings||{})},employees:data.employees||[]}:{settings:{...DEFAULT_SETTINGS},employees:[]};
+    const next={settings:normSettings(data&&data.settings),employees:(data&&data.employees)||[]};
     if(configLoaded&&JSON.stringify(next)===JSON.stringify(config))return;
     config=next;configLoaded=true;render();
   });
@@ -392,14 +409,14 @@ function viewSchedule(){
     h+='<td class="tot"><b>'+hrs(mins)+'ω</b><br>'+work+' μέρες · '+full+' ολοήμ.</td></tr>';
   });
   h+='</tbody><tfoot><tr><td class="emp">Κάλυψη</td>';
-  const cov=coverage();const s=config.settings;
+  const cov=coverage();const nd=weekNeeds();
   for(let d=0;d<7;d++){
     const m=cov.m[d],ev=cov.e[d];
-    h+='<td><div class="cov"><span class="'+(m<s.minMorning?'low':'ok')+'" title="Πρωί">Π '+m+'</span><span class="'+(ev<s.minEvening?'low':'ok')+'" title="Απόγευμα">Α '+ev+'</span></div></td>';
+    h+='<td><div class="cov"><span class="'+(m<nd[d].m?'low':'ok')+'" title="Πρωί: '+m+' από '+nd[d].m+'">Π '+m+'/'+nd[d].m+'</span><span class="'+(ev<nd[d].e?'low':'ok')+'" title="Απόγευμα: '+ev+' από '+nd[d].e+'">Α '+ev+'/'+nd[d].e+'</span></div></td>';
   }
   h+='<td></td></tr></tfoot></table></div>';
   h+='<div class="legend"><span><i class="c-M"></i>Πρωί</span><span><i class="c-E"></i>Απόγευμα</span><span><i class="c-F"></i>Ολοήμερο</span><span><i class="c-O"></i>Ρεπό</span><span>«ζήτησε» = ρεπό που ζήτησε ο εργαζόμενος</span></div>';
-  h+='<p class="note">Πάτα σε οποιοδήποτε κελί για να αλλάξεις τη βάρδια με το χέρι. Στην κάλυψη, Π = άτομα το πρωί, Α = άτομα το απόγευμα (το ολοήμερο μετράει και στα δύο).</p>';
+  h+='<p class="note">Πάτα σε οποιοδήποτε κελί για να αλλάξεις τη βάρδια με το χέρι. Στην κάλυψη, Π 3/2 σημαίνει 3 άτομα το πρωί ενώ χρειάζονται 2 (Α = απόγευμα, το ολοήμερο μετράει και στα δύο).</p>';
   if(copyText!==null)h+='<div class="card"><h3>Κείμενο προγράμματος</h3><p class="note">Η αυτόματη αντιγραφή δεν επιτρέπεται εδώ. Επίλεξε το κείμενο και αντέγραψέ το.</p><textarea id="copyArea" readonly>'+esc(copyText)+'</textarea></div>';
   return h;
 }
@@ -413,13 +430,13 @@ function coverage(){
   return {m,e:ev};
 }
 function warnings(){
-  const w=[];const s=config.settings;const cov=coverage();
+  const w=[];const nd=weekNeeds();const cov=coverage();
   emps().forEach(e=>{
     const r=reqDays(e.id).length,t=offTarget(e);
     if(r>t)w.push(esc(e.name)+': ζήτησε '+r+' ρεπό, ενώ τα στάνταρ του είναι '+t+'. Θα δουλέψει '+(7-r)+' μέρες.');
     if(week.schedule&&!week.schedule[e.id])w.push(esc(e.name)+' δεν υπάρχει στο πρόγραμμα. Βγάλε νέο πρόγραμμα για να μπει.');
   });
-  const low=[];for(let d=0;d<7;d++)if(cov.m[d]<s.minMorning||cov.e[d]<s.minEvening)low.push(DAYS[d]);
+  const low=[];for(let d=0;d<7;d++)if(cov.m[d]<nd[d].m||cov.e[d]<nd[d].e)low.push(DAYS[d]);
   if(week.schedule&&low.length)w.push('Λίγα άτομα σε κάποια βάρδια: '+low.join(', ')+'. Δες τη γραμμή «Κάλυψη» στο τέλος.');
   return w;
 }
@@ -438,6 +455,10 @@ function viewRequests(){
     h+='<td class="tot"><span class="'+(req.size>t?'over':'')+'"><b>'+req.size+'</b> / '+t+'</span></td></tr>';
   });
   h+='</tbody></table></div>';
+  h+='<h3 class="sect">Πόσα άτομα χρειάζονται αυτή την εβδομάδα</h3>';
+  h+='<p class="note">'+(hasWeekOverride()?'Έχεις αλλάξει τις ανάγκες μόνο για αυτή την εβδομάδα.':'Είναι οι στάνταρ τιμές από τις Ρυθμίσεις. Αν αλλάξεις κάτι εδώ, ισχύει μόνο για αυτή την εβδομάδα (π.χ. γιορτές).')+'</p>';
+  h+=needsGrid(weekNeeds(),'w');
+  if(hasWeekOverride()&&!readOnly)h+='<div class="bar"><button class="btn small" data-act="resetNeeds">Επαναφορά στις στάνταρ τιμές</button></div>';
   if(!readOnly)h+='<div class="bar"><button class="btn primary" data-act="generateFromReq">'+(week.schedule?'Βγάλε νέο πρόγραμμα':'Βγάλε πρόγραμμα')+'</button><button class="btn'+(armed==='clearReq'?' armed':'')+'" data-act="clearReq">'+(armed==='clearReq'?'Σίγουρα; Σβήνονται όλα':'Καθαρισμός ρεπό')+'</button></div>';
   h+='<p class="note">Η στήλη «Ρεπό» δείχνει πόσα ζήτησε / πόσα δικαιούται με βάση τα στάνταρ (π.χ. 6/7 = 1 ρεπό).</p>';
   return h;
@@ -476,15 +497,27 @@ function viewSettings(){
   return '<div class="settings">'+
   '<div class="card"><h3>Ωράριο μαγαζιού</h3><div class="row2"><label class="f">Ανοίγει<input type="time" id="s-open" data-set="open" value="'+esc(s.open)+'"'+dis+'></label><label class="f">Κλείνει<input type="time" id="s-close" data-set="close" value="'+esc(s.close)+'"'+dis+'></label></div><p class="note">Η πρωινή βάρδια ξεκινά με το άνοιγμα και η απογευματινή τελειώνει με το κλείσιμο. Η διάρκεια βγαίνει από τις ώρες του κάθε εργαζόμενου.</p></div>'+
   '<div class="card"><h3>Ολοήμερο</h3><div class="row2"><label class="f">Από<input type="time" id="s-fs" data-set="fullStart" value="'+esc(s.fullStart)+'"'+dis+'></label><label class="f">Έως<input type="time" id="s-fe" data-set="fullEnd" value="'+esc(s.fullEnd)+'"'+dis+'></label></div><p class="note">Το ολοήμερο μετράει και ως πρωί και ως απόγευμα στην κάλυψη.</p></div>'+
-  '<div class="card"><h3>Ελάχιστα άτομα ανά βάρδια</h3><div class="row2"><label class="f">Πρωί<input type="number" min="0" max="20" id="s-mm" data-set="minMorning" value="'+esc(s.minMorning)+'"'+dis+'></label><label class="f">Απόγευμα<input type="number" min="0" max="20" id="s-me" data-set="minEvening" value="'+esc(s.minEvening)+'"'+dis+'></label></div><p class="note">Το πρόγραμμα προσπαθεί να έχει τουλάχιστον τόσα άτομα κάθε μέρα.</p></div>'+
-  '</div>';
+  '</div>'+
+  '<div class="card"><h3>Άτομα ανά βάρδια, για κάθε μέρα</h3><p class="note">Πόσα άτομα θέλεις πρωί και πόσα απόγευμα κάθε μέρα. Ισχύουν για όλες τις εβδομάδες, εκτός αν τα αλλάξεις για μία εβδομάδα στην καρτέλα «Ρεπό εβδομάδας».</p>'+needsGrid(s.needs,'s')+'</div>';
+}
+function needsGrid(needs,scope){
+  const dis=readOnly?' disabled':'';
+  let h='<div class="gridbox"><table class="needs"><thead><tr><th class="emp">Βάρδια</th>';
+  for(let d=0;d<7;d++)h+='<th>'+DAYS_S[d]+'</th>';
+  h+='</tr></thead><tbody>';
+  [['m','Πρωί','c-M'],['e','Απόγευμα','c-E']].forEach(([k,l,c])=>{
+    h+='<tr><td class="emp"><span class="pill '+c+'">'+l+'</span></td>';
+    for(let d=0;d<7;d++)h+='<td><input type="number" min="0" max="20" inputmode="numeric" id="need-'+scope+'-'+d+'-'+k+'" data-need="'+scope+'|'+d+'|'+k+'" value="'+needs[d][k]+'" aria-label="'+l+' '+DAYS[d]+'"'+dis+'></td>';
+    h+='</tr>';
+  });
+  return h+'</tbody></table></div>';
 }
 
 /* ---------- actions ---------- */
 async function doGenerate(){
   let prev=null;
   try{const p=await backend.getWeek(ymd(addDays(parseYmd(weekId),-7)));prev=p&&p.schedule}catch(e){}
-  week.schedule=generate(emps(),week.requests||{},config.settings,prev,(Math.random()*2**31)|0);
+  week.schedule=generate(emps(),week.requests||{},weekNeeds(),prev,(Math.random()*2**31)|0);
   week.reqKey=reqKeyNow();week.edited=false;week.generatedAt=new Date().toISOString();
   armed=null;tab='schedule';rememberTab();saveWeek();render();toast('Το πρόγραμμα βγήκε');
 }
@@ -542,6 +575,7 @@ main.addEventListener('click',e=>{
   if(act==='addEmp'){const n={id:uid(),name:'',days:5,hours:8,fullDays:0,pref:'any'};config.employees=[...emps(),n];saveConfig();render();const i=document.getElementById('n-'+n.id);if(i)i.focus();return}
   if(act==='generate'||act==='generateFromReq'){doGenerate();return}
   if(act==='regen'){if(week.edited&&armed!=='regen'){armed='regen';render();return}doGenerate();return}
+  if(act==='resetNeeds'){delete week.needs;saveWeek();render();return}
   if(act==='clearReq'){if(armed!=='clearReq'){armed='clearReq';render();return}week.requests={};armed=null;saveWeek();render();return}
   if(act==='copy'){
     const text=buildText();
@@ -568,9 +602,15 @@ main.addEventListener('change',e=>{
     delete emp.example;
     saveConfig();render();return;
   }
+  if(t.dataset.need){
+    const [scope,d,k]=t.dataset.need.split('|');const v=clampInt(t.value,0,20,0);
+    if(scope==='s'){const nd=clone(config.settings.needs);nd[+d][k]=v;config.settings={...config.settings,needs:nd};saveConfig()}
+    else{const nd=clone(weekNeeds());nd[+d][k]=v;week.needs=nd;saveWeek()}
+    render();return;
+  }
   if(t.dataset.set){
     const k=t.dataset.set;
-    config.settings={...config.settings,[k]:(k==='minMorning'||k==='minEvening')?clampInt(t.value,0,20,2):t.value};
+    config.settings={...config.settings,[k]:t.value};
     saveConfig();render();
   }
 });
